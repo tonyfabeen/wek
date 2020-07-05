@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"net/url"
 )
 
 type mockResponseWriter struct {
@@ -38,7 +39,8 @@ func TestMatch(t *testing.T)  {
 		router.Post("/", postHandler)
 
 		writer := newMockResponseWriter()
-		request := http.Request{Method: http.MethodPost}
+		requestURL := &url.URL{Path: "/"}
+		request := http.Request{Method: http.MethodPost, URL: requestURL}
 		handler := router.match(&request)
 
 		postHandler(writer, &request)
@@ -60,7 +62,8 @@ func TestMatch(t *testing.T)  {
 		router.Get("/", getHandler)
 
 		writer := newMockResponseWriter()
-		request := http.Request{Method: http.MethodGet}
+		requestURL := &url.URL{Path: "/"}
+		request := http.Request{Method: http.MethodGet, URL: requestURL}
 		handler := router.match(&request)
 
 		getHandler(writer, &request)

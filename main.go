@@ -23,7 +23,7 @@ func (r *router) match(req *http.Request) http.HandlerFunc {
 	handler := noRoutesMatches
 
 	for _, route := range r.routes {
-		if route.method == req.Method {
+		if route.method == req.Method && route.path == req.URL.Path {
 			handler = route.handler
 		}
 	}
