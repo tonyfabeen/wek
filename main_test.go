@@ -1,12 +1,12 @@
 package main
 
 import (
-	"io/ioutil"
 	"bytes"
+	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
-	"testing"
 	"net/url"
+	"testing"
 )
 
 type mockResponseWriter struct {
@@ -29,8 +29,71 @@ func (mrw mockResponseWriter) Write(content []byte) (int, error) {
 }
 func (mrw mockResponseWriter) WriteHeader(statusCode int) {}
 
-func TestMatch(t *testing.T)  {
-	t.Run("when POST method", func (t *testing.T)  {
+func TestRouteTree(t *testing.T) {
+	tree := newRouteTree("/")
+
+	root := tree.root
+	if root == nil {
+		t.Error("should have a root node")
+	}
+
+	if root.value != "/" {
+		t.Error("should have the right value")
+	}
+
+	if root.child != nil {
+		t.Error("should not have a child")
+	}
+
+	tree = &routeTree{}
+	tree.Get("/", func(w http.ResponseWriter, req *http.Request) {
+		w.Write([]byte("handle GET method"))
+	})
+
+	root = tree.root
+	if root == nil {
+		t.Error("should have a root node")
+	}
+
+	if root.value != "/" {
+		t.Error("should have the right value")
+	}
+
+	child := root.child
+	if child != nil {
+		t.Errorf("should not have a child %v", child)
+	}
+
+	tree = &routeTree{}
+	tree.Get("/posts", func(w http.ResponseWriter, req *http.Request) {
+		w.Write([]byte("handle GET /posts"))
+	})
+
+	root = tree.root
+	if root == nil {
+		t.Error("should have a root node")
+	}
+
+	if root.value != "/" {
+		t.Error("should have the right value")
+	}
+
+	child = root.child
+	if child == nil {
+		t.Error("should have a child")
+	}
+
+	if child.handlers["GET"] == nil {
+		t.Error("should have a GET handler")
+	}
+
+	if child.handlers["POST"] != nil {
+		t.Error("should not have a POST handler")
+	}
+}
+
+func TestMatch(t *testing.T) {
+	t.Run("when POST method", func(t *testing.T) {
 		postHandler := func(w http.ResponseWriter, req *http.Request) {
 			w.Write([]byte("handle POST method\n"))
 		}
@@ -53,7 +116,7 @@ func TestMatch(t *testing.T)  {
 		}
 	})
 
-	t.Run("when GET method", func (t *testing.T)  {
+	t.Run("when GET method", func(t *testing.T) {
 		getHandler := func(w http.ResponseWriter, req *http.Request) {
 			w.Write([]byte("handle GET method\n"))
 		}
@@ -76,7 +139,7 @@ func TestMatch(t *testing.T)  {
 		}
 	})
 
-	t.Run("when no route matches", func (t *testing.T)  {
+	t.Run("when no route matches", func(t *testing.T) {
 		router := newRouter()
 
 		writer := newMockResponseWriter()
@@ -108,7 +171,7 @@ func TestRequests(t *testing.T) {
 	server := httptest.NewServer(router)
 	defer server.Close()
 
-	t.Run("when GET method", func(t *testing.T)  {
+	t.Run("when GET method", func(t *testing.T) {
 		response, err := http.Get(server.URL)
 		if err != nil {
 			t.Error("should not return error")
@@ -122,7 +185,7 @@ func TestRequests(t *testing.T) {
 		}
 	})
 
-	t.Run("when POST method", func(t *testing.T)  {
+	t.Run("when POST method", func(t *testing.T) {
 		response, err := http.Post(server.URL, "text/plain", nil)
 		if err != nil {
 			t.Error("should not return error")
@@ -136,7 +199,7 @@ func TestRequests(t *testing.T) {
 		}
 	})
 
-	t.Run("when route does not exists", func(t *testing.T)  {
+	t.Run("when route does not exists", func(t *testing.T) {
 		router := newRouter()
 		server := httptest.NewServer(router)
 		defer server.Close()

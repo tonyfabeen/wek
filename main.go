@@ -1,8 +1,8 @@
 package main
 
 import (
-	"log"
 	"net/http"
+	"strings"
 )
 
 type router struct {
@@ -28,7 +28,6 @@ func (r *router) match(req *http.Request) http.HandlerFunc {
 		}
 	}
 
-	log.Printf("handler %T", handler)
 	return handler
 }
 
@@ -60,6 +59,55 @@ type route struct {
 
 func noRoutesMatches(w http.ResponseWriter, req *http.Request) {
 	w.Write([]byte("No route matches"))
+}
+
+type routeTree struct {
+	root *routeNode
+}
+
+func newRouteTree(path string) *routeTree {
+	root := &routeNode{
+		value:    path,
+		handlers: make(map[string]http.HandlerFunc),
+	}
+
+	return &routeTree{root}
+}
+
+func (rt *routeTree) Get(path string, handler http.HandlerFunc) {
+	if len(path) == 1 {
+		rt.root = newRouteNode(path)
+		return
+	}
+
+	rt.root = newRouteNode("/")
+	tokens := strings.Split(path, "/")
+
+	current := rt.root
+
+	for i := 1; i < len(tokens); i++ {
+		node := newRouteNode(tokens[i])
+		current.child = node
+		current = node
+	}
+
+	current.handlers["GET"] = handler
+}
+
+func (rt *routeTree) Post(path string, handler http.HandlerFunc) {
+}
+
+type routeNode struct {
+	value    string
+	handlers map[string]http.HandlerFunc
+	child    *routeNode
+}
+
+func newRouteNode(value string) *routeNode {
+	return &routeNode{
+		value:    value,
+		handlers: make(map[string]http.HandlerFunc),
+	}
 }
 
 func main() {
