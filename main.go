@@ -53,6 +53,28 @@ func (rt *routeTree) Add(httpMethod string, path string, handler http.HandlerFun
 	node.handlers[httpMethod] = handler
 }
 
+func (rt *routeTree) Find(path string) *routeNode {
+	if rt.root.value == path {
+		return rt.root
+	}
+
+	pathTokens := strings.Split(path, "/")
+	pathIndex := 1
+	node := rt.root.child
+	match := node
+	for match != nil && node != nil {
+		if node.value == pathTokens[pathIndex] {
+			match = node
+			node = node.child
+			pathIndex++
+		} else {
+			match = nil
+		}
+	}
+
+	return match
+}
+
 type routeNode struct {
 	value    string
 	handlers map[string]http.HandlerFunc

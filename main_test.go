@@ -119,3 +119,30 @@ func TestAddRoute(t *testing.T) {
 		})
 	})
 }
+
+func TestFindRoute(t *testing.T) {
+	routeTree := routeTree{}
+	routeTree.Add(http.MethodGet, "/", defaultHandler("GET / handler"))
+
+	node := routeTree.Find("/")
+	if node.value != "/" {
+		t.Error("should return the correct node")
+	}
+
+	routeTree.Add(http.MethodGet, "/posts", defaultHandler("GET /posts handler"))
+	node = routeTree.Find("/posts")
+	if node.value != "posts" {
+		t.Error("should return the correct node")
+	}
+
+	node = routeTree.Find("/authors")
+	if node != nil {
+		t.Error("should return nil node")
+	}
+
+	routeTree.Add(http.MethodGet, "/posts/authors", defaultHandler("GET /authors handler"))
+	node = routeTree.Find("/posts/authors")
+	if node.value != "authors" {
+		t.Error("should return the correct node")
+	}
+}
