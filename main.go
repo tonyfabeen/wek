@@ -6,95 +6,51 @@ import (
 )
 
 type router struct {
-	routes []route
+	*routeTree
 }
 
 func newRouter() *router {
-	routes := []route{}
-	return &router{routes}
-}
-
-func (r *router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	handler := r.match(req)
-	handler(w, req)
-}
-
-func (r *router) match(req *http.Request) http.HandlerFunc {
-	handler := noRoutesMatches
-
-	for _, route := range r.routes {
-		if route.method == req.Method && route.path == req.URL.Path {
-			handler = route.handler
-		}
-	}
-
-	return handler
+	return &router{}
 }
 
 func (r *router) Get(path string, handler http.HandlerFunc) {
-	route := route{
-		method:  http.MethodGet,
-		path:    path,
-		handler: handler,
-	}
-
-	r.routes = append(r.routes, route)
+	r.routeTree.Add(http.MethodGet, path, handler)
 }
 
 func (r *router) Post(path string, handler http.HandlerFunc) {
-	route := route{
-		method:  http.MethodPost,
-		path:    path,
-		handler: handler,
-	}
-
-	r.routes = append(r.routes, route)
+	r.routeTree.Add(http.MethodPost, path, handler)
 }
 
-type route struct {
-	method  string
-	path    string
-	handler http.HandlerFunc
-}
-
-func noRoutesMatches(w http.ResponseWriter, req *http.Request) {
-	w.Write([]byte("No route matches"))
+func (r *router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	// handler := r.match(req)
+	// handler(w, req)
 }
 
 type routeTree struct {
 	root *routeNode
 }
 
-func newRouteTree(path string) *routeTree {
-	root := &routeNode{
-		value:    path,
-		handlers: make(map[string]http.HandlerFunc),
+func (rt *routeTree) Add(httpMethod string, path string, handler http.HandlerFunc) {
+	if rt.root == nil {
+		rt.root = newRouteNode("/")
 	}
 
-	return &routeTree{root}
-}
-
-func (rt *routeTree) Get(path string, handler http.HandlerFunc) {
-	if len(path) == 1 {
-		rt.root = newRouteNode(path)
+	if path == "/" {
+		rt.root.handlers[httpMethod] = handler
 		return
 	}
 
-	rt.root = newRouteNode("/")
-	tokens := strings.Split(path, "/")
+	pathTokens := strings.Split(path, "/")
+	node := rt.root
 
-	current := rt.root
-
-	for i := 1; i < len(tokens); i++ {
-		node := newRouteNode(tokens[i])
-		current.child = node
-		current = node
+	for _, pathToken := range pathTokens[1:] {
+		if node.child == nil {
+			node.child = newRouteNode(pathToken)
+		}
+		node = node.child
 	}
 
-	current.handlers["GET"] = handler
-}
-
-func (rt *routeTree) Post(path string, handler http.HandlerFunc) {
+	node.handlers[httpMethod] = handler
 }
 
 type routeNode struct {
@@ -113,14 +69,10 @@ func newRouteNode(value string) *routeNode {
 func main() {
 	router := newRouter()
 	router.Get("/", func(w http.ResponseWriter, req *http.Request) {
-		if req.Method == http.MethodGet {
-			w.Write([]byte("handle GET method"))
-		}
+		w.Write([]byte("handle GET method"))
 	})
 	router.Post("/", func(w http.ResponseWriter, req *http.Request) {
-		if req.Method == http.MethodPost {
-			w.Write([]byte("handle POST method"))
-		}
+		w.Write([]byte("handle POST method"))
 	})
 
 	http.ListenAndServe(":9090", router)

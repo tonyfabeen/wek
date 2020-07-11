@@ -2,12 +2,15 @@ package main
 
 import (
 	"bytes"
-	"io/ioutil"
 	"net/http"
-	"net/http/httptest"
-	"net/url"
 	"testing"
 )
+
+var defaultHandler = func(message string) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		w.Write([]byte(message))
+	}
+}
 
 type mockResponseWriter struct {
 	writerBuffer *bytes.Buffer
@@ -29,191 +32,90 @@ func (mrw mockResponseWriter) Write(content []byte) (int, error) {
 }
 func (mrw mockResponseWriter) WriteHeader(statusCode int) {}
 
-func TestRouteTree(t *testing.T) {
-	tree := newRouteTree("/")
+func TestAddRoute(t *testing.T) {
+	t.Run("when no root", func(t *testing.T) {
+		t.Run("and add root", func(t *testing.T) {
+			routeTree := routeTree{}
+			routeTree.Add(http.MethodGet, "/", defaultHandler("GET / handler"))
 
-	root := tree.root
-	if root == nil {
-		t.Error("should have a root node")
-	}
+			if routeTree.root == nil {
+				t.Error("should have a root node")
+			}
 
-	if root.value != "/" {
-		t.Error("should have the right value")
-	}
+			if len(routeTree.root.handlers) == 0 {
+				t.Error("root node should have handlers")
+			}
 
-	if root.child != nil {
-		t.Error("should not have a child")
-	}
+			if handler := routeTree.root.handlers[http.MethodGet]; handler == nil {
+				t.Error("root node should have the handler")
+			}
+		})
 
-	tree = &routeTree{}
-	tree.Get("/", func(w http.ResponseWriter, req *http.Request) {
-		w.Write([]byte("handle GET method"))
+		t.Run("and add root and child node", func(t *testing.T) {
+			routeTree := routeTree{}
+			routeTree.Add(http.MethodGet, "/posts", defaultHandler("GET /posts handler"))
+
+			if routeTree.root == nil {
+				t.Error("should have a root node")
+			}
+
+			if len(routeTree.root.handlers) != 0 {
+				t.Error("root node should not have handlers")
+			}
+
+			if routeTree.root.child == nil {
+				t.Error("should have a child")
+			}
+
+			if routeTree.root.child.value != "posts" {
+				t.Error("should have the correct value")
+			}
+
+			if handler := routeTree.root.child.handlers[http.MethodGet]; handler == nil {
+				t.Error("child node should have the handler")
+			}
+		})
 	})
 
-	root = tree.root
-	if root == nil {
-		t.Error("should have a root node")
-	}
+	t.Run("when root", func(t *testing.T) {
+		t.Run("and add a handler to root", func(t *testing.T) {
+			routeTree := routeTree{}
+			routeTree.Add(http.MethodGet, "/", defaultHandler("GET / handler"))
+			routeTree.Add(http.MethodPost, "/", defaultHandler("POST / handler"))
 
-	if root.value != "/" {
-		t.Error("should have the right value")
-	}
+			if len(routeTree.root.handlers) != 2 {
+				t.Error("should have both handlers")
+			}
 
-	child := root.child
-	if child != nil {
-		t.Errorf("should not have a child %v", child)
-	}
+			if handler := routeTree.root.handlers["GET"]; handler == nil {
+				t.Error("should have a GET handler")
+			}
 
-	tree = &routeTree{}
-	tree.Get("/posts", func(w http.ResponseWriter, req *http.Request) {
-		w.Write([]byte("handle GET /posts"))
-	})
+			if handler := routeTree.root.handlers["POST"]; handler == nil {
+				t.Error("should have a POST handler")
+			}
+		})
 
-	root = tree.root
-	if root == nil {
-		t.Error("should have a root node")
-	}
+		t.Run("and add a child node", func(t *testing.T) {
+			routeTree := routeTree{}
+			routeTree.Add(http.MethodGet, "/", defaultHandler("GET / handler"))
+			routeTree.Add(http.MethodGet, "/posts", defaultHandler("GET /posts handler"))
 
-	if root.value != "/" {
-		t.Error("should have the right value")
-	}
+			if len(routeTree.root.handlers) != 1 {
+				t.Error("should have a handler")
+			}
 
-	child = root.child
-	if child == nil {
-		t.Error("should have a child")
-	}
+			if handler := routeTree.root.handlers["GET"]; handler == nil {
+				t.Error("should have a GET handler")
+			}
 
-	if child.handlers["GET"] == nil {
-		t.Error("should have a GET handler")
-	}
+			if routeTree.root.child.value != "posts" {
+				t.Error("should have the correct value")
+			}
 
-	if child.handlers["POST"] != nil {
-		t.Error("should not have a POST handler")
-	}
-}
-
-func TestMatch(t *testing.T) {
-	t.Run("when POST method", func(t *testing.T) {
-		postHandler := func(w http.ResponseWriter, req *http.Request) {
-			w.Write([]byte("handle POST method\n"))
-		}
-
-		router := newRouter()
-		router.Post("/", postHandler)
-
-		writer := newMockResponseWriter()
-		requestURL := &url.URL{Path: "/"}
-		request := http.Request{Method: http.MethodPost, URL: requestURL}
-		handler := router.match(&request)
-
-		postHandler(writer, &request)
-		handler(writer, &request)
-
-		expected := "handle POST method\nhandle POST method\n"
-		got := writer.writerBuffer.String()
-		if expected != got {
-			t.Errorf("should return the right content\nexpected: %s \ngot: %s", expected, got)
-		}
-	})
-
-	t.Run("when GET method", func(t *testing.T) {
-		getHandler := func(w http.ResponseWriter, req *http.Request) {
-			w.Write([]byte("handle GET method\n"))
-		}
-
-		router := newRouter()
-		router.Get("/", getHandler)
-
-		writer := newMockResponseWriter()
-		requestURL := &url.URL{Path: "/"}
-		request := http.Request{Method: http.MethodGet, URL: requestURL}
-		handler := router.match(&request)
-
-		getHandler(writer, &request)
-		handler(writer, &request)
-
-		expected := "handle GET method\nhandle GET method\n"
-		got := writer.writerBuffer.String()
-		if expected != got {
-			t.Errorf("should return the right content\nexpected: %s \ngot: %s", expected, got)
-		}
-	})
-
-	t.Run("when no route matches", func(t *testing.T) {
-		router := newRouter()
-
-		writer := newMockResponseWriter()
-		request := http.Request{Method: http.MethodGet}
-		handler := router.match(&request)
-
-		handler(writer, &request)
-
-		expected := "No route matches"
-		got := writer.writerBuffer.String()
-		if expected != got {
-			t.Errorf("should return the right content\nexpected: %s \ngot: %s", expected, got)
-		}
-	})
-}
-
-func TestRequests(t *testing.T) {
-	router := newRouter()
-	getHandler := func(w http.ResponseWriter, req *http.Request) {
-		w.Write([]byte("handle GET method"))
-	}
-	router.Get("/", getHandler)
-
-	postHandler := func(w http.ResponseWriter, req *http.Request) {
-		w.Write([]byte("handle POST method"))
-	}
-	router.Post("/", postHandler)
-
-	server := httptest.NewServer(router)
-	defer server.Close()
-
-	t.Run("when GET method", func(t *testing.T) {
-		response, err := http.Get(server.URL)
-		if err != nil {
-			t.Error("should not return error")
-		}
-
-		body, _ := ioutil.ReadAll(response.Body)
-		response.Body.Close()
-
-		if bodyString := string(body); bodyString != "handle GET method" {
-			t.Errorf("should return the right response, %s", bodyString)
-		}
-	})
-
-	t.Run("when POST method", func(t *testing.T) {
-		response, err := http.Post(server.URL, "text/plain", nil)
-		if err != nil {
-			t.Error("should not return error")
-		}
-
-		body, _ := ioutil.ReadAll(response.Body)
-		response.Body.Close()
-
-		if bodyString := string(body); bodyString != "handle POST method" {
-			t.Errorf("should return the right response, %s", bodyString)
-		}
-	})
-
-	t.Run("when route does not exists", func(t *testing.T) {
-		router := newRouter()
-		server := httptest.NewServer(router)
-		defer server.Close()
-
-		response, err := http.Get(server.URL)
-		if err != nil {
-			t.Error("should not return error")
-		}
-
-		body, _ := ioutil.ReadAll(response.Body)
-		response.Body.Close()
-
-		if bodyString := string(body); bodyString != "No route matches" {
-			t.Errorf("should return the right response, %s", bodyString)
-		}
+			if handler := routeTree.root.child.handlers["GET"]; handler == nil {
+				t.Error("child should have a GET handler")
+			}
+		})
 	})
 }
